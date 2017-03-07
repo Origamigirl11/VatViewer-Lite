@@ -22,7 +22,7 @@ function varargout = VatViewer_Lite_Update(varargin)
 
 % Edit the above text to modify the response to help VatViewer_Lite_Update
 
-% Last Modified by GUIDE v2.5 04-Feb-2017 13:43:20
+% Last Modified by GUIDE v2.5 27-Feb-2017 12:19:40
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -84,6 +84,8 @@ set(handles.uibuttongroup_fatType,'SelectedObject',...
      handles.radiobutton_Gray);
  
  colormap('gray');
+ 
+
 
 
 
@@ -508,7 +510,7 @@ for k = 1:length(B)
    boundary = B{k};
 
    plot(boundary(:,2), boundary(:,1),'g','LineWidth',1);
-   
+    
 
 end
 
@@ -606,3 +608,144 @@ else
     errordlg('Load results data before selecting a colormap!','Load Error');
 
 end
+
+
+% --- Executes on button press in CGP.
+function CGP_Callback(hObject, eventdata, handles)
+% hObject    handle to CGP (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+vatviewerGlobalVars;
+
+currSliceNum = get(handles.slider_imageSlice,'Value');
+imageSlice = VOL_3D(:,:,currSliceNum);
+
+
+%opens a text file called "EXEATtest"
+%Stands for "example EAT test file
+%Test refers to the fact that the following lines of code do not
+%perform operations on the MRI data. 
+fileID = fopen('EXEATtest.txt','w');
+
+%Reads in "example EAT" paint image
+I=imread('EXEAT.png');
+BW=im2bw(I);
+ 
+ 
+[B,L] = bwboundaries(BW,8,'holes');
+%B is the row/col coordinates of the boundary
+%See line 502
+%I think L is the number of elements in a given regions (not sure)
+ 
+totalpoints=0;
+
+%this is the loop for indicating the total number of slices (very top)
+for k=1:length(B)
+    totalpoints=totalpoints+length(B{k});
+end    
+
+%displays the total number of slices. 
+fprintf(fileID, '%i', totalpoints);
+fileID=fopen('EXEAT.txt');
+
+
+
+%I want this to loop through and from slice 0:totalpoints
+%display the slice number next to the coordinate pairs.
+%z is the slice number
+
+for k = 0:totalpoints
+    if totalpoints == 0
+        fprintf(fileID, '# ', imageSlice); %This is for the slices with no data
+        fprintf(fileID,'0');
+    else 
+        
+        %this is the loop for (x,y) pairs
+        for k = 1:length(B)  
+        boundary = B{k};
+        points=[boundary(:,2), boundary(:,1)]; 
+        plot(boundary(:,2), boundary(:,1),'g','LineWidth',1);
+        fprintf(fileID,'%f\r\n',points);
+        end
+        
+        %This is for slice z
+        for k=0:length(B)
+        fprintf(fileID,' ',imageSlice)    
+        end    
+            
+    end
+end    
+    
+        
+
+
+fclose(fileID);
+type EXEAT.txt
+
+
+% --- Executes on button press in Statistics.
+function Statistics_Callback(hObject, eventdata, handles)
+% hObject    handle to Statistics (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+
+vatviewerGlobalVars;
+
+% filename = get(handles.resultsFileName,'Filename');
+filename = 'Eat.txt';
+
+%
+%I am reading the file's first line into a variable so that I know how wany
+%contours there are to count
+%
+
+
+
+fileID = fopen(filename, 'r');
+
+
+
+C = fscanf(fileID,'%d');
+disp(C);
+tline = fgetl(fileID);
+n = 0;
+num = 0;
+h = zeros(0,3);
+while ischar(tline)
+
+    d = strfind(tline, '#');
+    if (~isempty(d))
+        disp('This is the slide number:');
+        disp(tline);
+        num = textscan(fileID,'%d',1);
+        disp('This is the number of points'); 
+        disp(num{1});
+        if num{1} > 0
+            test = textscan(fileID,'%f %f %f',num{1});
+            M = test(1,1);
+            N = test(1,2);
+            O = test(1,3);
+            total = horzcat(M{1,1},N{1,1},O{1,1});
+            total = vertcat(total,total(1,:));
+            disp(total);
+            contour(n+1).number = num{1};
+            contour(n+1).line = total;
+            h = vertcat(h,total);
+            n = n+1;
+        else 
+            num = textscan(fileID,'%d',1)
+        end
+    end
+    tline = fgetl(fileID);
+end
+h = vertcat(h,zeros(0,3));
+
+figure;
+plot3(h(:,1),h(:,2),h(:,3),'.')
+figure;
+
+plot(contour(5).line(:,1),contour(5).line(:,2),'.');
+
+fclose(fileID);
