@@ -1,7 +1,11 @@
-vatviewerGlobalVars;
+
+clear; clc;
+
+% set to true if want to see the plots
+showPlots = true;
 
 % load the EAT variable from the results file
-resultsFileName = 'subject12_i_results.mat';
+resultsFileName = 'subject01_i_results.mat';
 
 % resultsFile = get(handles.resultsFileName,'FileName');
 load(resultsFileName,'EAT3d');
@@ -11,12 +15,10 @@ load(resultsFileName,'CAT3d');
 % currSliceNum = get(handles.slider_imageSlice,'Value');
 numSlices = size(EAT3d,3); % 3rd dim is slices
 
-
 % create base of output filenames based on results filename
 indexDot = find(resultsFileName == '.');
 textOutName = resultsFileName(1,1:indexDot-1);
 textOutName = strcat(textOutName,'_CGB_EAT_CAT_COMPOSITE.txt');
-
 
 % open and write top part of file
 fid = fopen(textOutName,'w');
@@ -30,25 +32,22 @@ for i=1:numSlices
 
     % pull out this frame of data, convert to pure binary, and write out
     % the boundary pixels as the contours
-    imageSlice_EAT = EAT3d(:,:,numSlices);
-    imageSlice_CAT = CAT3d(:,:,numSlices);
+    imageSlice_EAT = EAT3d(:,:,i);
+    imageSlice_CAT = CAT3d(:,:,i);
 
     % convert image to true binary
     binImageEAT = (imageSlice_EAT>0);
     binImageCAT = (imageSlice_CAT>0);
 
-    binImageComposite=or(binImageEAT,binImageCAT);
-
-%     clear imageSlice_EAT;
-%     clear imageSlice_CAT;
-
-   
-    [B,L] = bwboundaries(binImageComposite,8,'holes');
+    % only do this if EAT has data
+    if nnz(binImageEAT) > 0
     
-    % number of objects algorithm traced
-    numObjects = max(size(B));
+        binImageComposite = or(binImageEAT,binImageCAT);
+
+        [B,L] = bwboundaries(binImageComposite,8,'holes');
     
-    if numObjects > 0
+        % number of objects algorithm traced
+        numObjects = max(size(B));
     
         % count up the total number of points for all objects
         totalNumPointsOnFrame = 0;
@@ -68,11 +67,14 @@ for i=1:numSlices
             for k=1:numPtsObject
                 fprintf(fid,'%.3f %.3f %.3f\n',points(k,2)-1,points(k,1),i-1);
             end
-            plot(points(:,2),points(:,1),'k','LineWidth',1);
+            
+            if showPlots
+                hold on;
+                plot(points(:,2),points(:,1),'k','LineWidth',1);
+                hold off;
+            end
         end
    
-        %pause;
-        
     else
         % write out zero for this frame
         fprintf(fid,'%d\n',0);
@@ -82,6 +84,5 @@ for i=1:numSlices
 end
 
 % close file
-hold off;
 fclose(fid);
 
