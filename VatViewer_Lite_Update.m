@@ -22,7 +22,7 @@ function varargout = VatViewer_Lite_Update(varargin)
 
 % Edit the above text to modify the response to help VatViewer_Lite_Update
 
-% Last Modified by GUIDE v2.5 27-Feb-2017 12:19:40
+% Last Modified by GUIDE v2.5 22-Mar-2017 21:37:35
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -91,7 +91,7 @@ set(handles.uibuttongroup_fatType,'SelectedObject',...
 
 % disable boundary button
 
- set(handles.pushbutton_FindBoundaries,'Enable','off');
+%  set(handles.pushbutton_FindBoundaries,'Enable','off');
 
 
 
@@ -132,10 +132,13 @@ vatviewerGlobalVars;
 
 [resultsFileName, resultsPath] = uigetfile('*.mat','Choose results file...');
 
+
+
 if isequal(resultsFileName,0) || isequal(resultsPath,0)
     disp('User pressed cancel')
 
 else
+
 
     
 
@@ -403,7 +406,11 @@ if BOOL_LOADED_DATA
 % 
 %             set(handles.togglebutton_TraceBoundaries,'Enable','off');
 
-      
+         case 'C.A.T.'
+
+            disp('CAT selected.');
+
+            WHICH_TYPE = 'CAT_3D';
 
         otherwise
 
@@ -468,6 +475,14 @@ else
 
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  START   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % --- Executes on button press in pushbutton_FindBoundaries.
 function pushbutton_FindBoundaries_Callback(hObject, eventdata, handles)
@@ -477,29 +492,38 @@ function pushbutton_FindBoundaries_Callback(hObject, eventdata, handles)
 
 vatviewerGlobalVars;
 
+% load the EAT variable from the results file
+resultsFileName = 'subject12_i_results.mat';
 
+% resultsFile = get(handles.resultsFileName,'FileName');
+load(resultsFileName,'EAT3d');
+load(resultsFileName,'CAT3d');
 
 % pull out current frame of data
-
 currSliceNum = get(handles.slider_imageSlice,'Value');
+numSlices = size(EAT3d,3); % 3rd dim is slices
 
-disp(sprintf('Current frame for boundary tracing: %d',currSliceNum));
+% disp(sprintf('Current frame for boundary tracing: %d',currSliceNum));
 
-imageSlice = VOL_3D(:,:,currSliceNum);
+
+
+imageSlice_EAT = EAT3d(:,:,currSliceNum);
+imageSlice_CAT = CAT3d(:,:,currSliceNum);
 
 
 
 % convert image to true binary
+binImageEAT = (imageSlice_EAT>0);
+binImageCAT = (imageSlice_CAT>0);
 
-binImage = (imageSlice>0);
+binImageComposite=or(binImageEAT,binImageCAT);
 
-clear imageSlice;
-
+clear imageSlice_EAT;
+clear imageSlice_CAT;
 
 
 % trace boundaries and overlay results
-
-[B,L] = bwboundaries(binImage,8,'holes');
+[B,L] = bwboundaries(binImageComposite,8,'holes');
 
 hold on;
 
@@ -516,6 +540,92 @@ end
 
 hold off;
 
+
+
+
+
+
+
+
+% create base of output filenames based on results filename
+indexDot = find(resultsFileName == '.');
+textOutName = resultsFileName(1,1:indexDot-1);
+textOutName = strcat(textOutName,'_CGB_EAT_CAT_COMPOSITE.txt');
+
+
+
+% open and write top part of file
+fid = fopen(textOutName,'w');
+fprintf(fid,'%d\n',numSlices);
+
+% open up a figure window to display boundary pixels, use space bar to loop
+% through each image
+figure; 
+hold on;
+
+% loop through number of slices
+for i=1:numSlices
+    
+    % write frame number
+    fprintf(fid,'#%d\n',i-1);
+
+    % pull out this frame of data, convert to pure binary, and write out
+    % the boundary pixels as the contours
+    imageSlice = EAT3d(:,:,i);
+    binImage = (imageSlice>0);
+    clear imageSlice;
+    [B,L] = bwboundaries(binImageComposite,8,'holes');
+    
+    % number of objects algorithm traced
+    numObjects = max(size(B));
+    
+    if numObjects > 0
+    
+        % count up the total number of points for all objects
+        totalNumPointsOnFrame = 0;
+        for j=1:numObjects
+            points = B{j};
+            numPtsObject = size(points,1); % column wise, num rows is num pts
+            totalNumPointsOnFrame = totalNumPointsOnFrame + numPtsObject;
+        end
+
+        % write out the number of points on this frame
+        fprintf(fid,'%d\n',totalNumPointsOnFrame);
+
+        % loop through each object and write points
+        for j=1:numObjects
+            points = B{j};
+            numPtsObject = size(points,1);
+            for k=1:numPtsObject
+                fprintf(fid,'%.3f %.3f %.3f\n',points(k,2)-1,points(k,1),i-1);
+            end
+            plot(points(:,2),points(:,1),'k','LineWidth',1);
+        end
+   
+        %pause;
+        
+    else
+        % write out zero for this frame
+        fprintf(fid,'%d\n',0);
+
+    end
+    
+end
+
+% close file
+hold off;
+fclose(fid);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
@@ -618,70 +728,88 @@ function CGP_Callback(hObject, eventdata, handles)
 
 vatviewerGlobalVars;
 
-currSliceNum = get(handles.slider_imageSlice,'Value');
-imageSlice = VOL_3D(:,:,currSliceNum);
 
+% load the EAT variable from the results file
+resultsFileName = 'subject01_i_results.mat';
 
-%opens a text file called "EXEATtest"
-%Stands for "example EAT test file
-%Test refers to the fact that the following lines of code do not
-%perform operations on the MRI data. 
-fileID = fopen('EXEATtest.txt','w');
-
-%Reads in "example EAT" paint image
-I=imread('EXEAT.png');
-BW=im2bw(I);
- 
- 
-[B,L] = bwboundaries(BW,8,'holes');
-%B is the row/col coordinates of the boundary
-%See line 502
-%I think L is the number of elements in a given regions (not sure)
- 
-totalpoints=0;
-
-%this is the loop for indicating the total number of slices (very top)
-for k=1:length(B)
-    totalpoints=totalpoints+length(B{k});
-end    
-
-%displays the total number of slices. 
-fprintf(fileID, '%i', totalpoints);
-fileID=fopen('EXEAT.txt');
+% resultsFile = get(handles.resultsFileName,'FileName');
+% resultsFile = 'subject01_i_results.mat';
+load(resultsFileName,'EAT3d');
+load(resultsFileName,'CAT3d');
 
 
 
-%I want this to loop through and from slice 0:totalpoints
-%display the slice number next to the coordinate pairs.
-%z is the slice number
 
-for k = 0:totalpoints
-    if totalpoints == 0
-        fprintf(fileID, '# ', imageSlice); %This is for the slices with no data
-        fprintf(fileID,'0');
-    else 
-        
-        %this is the loop for (x,y) pairs
-        for k = 1:length(B)  
-        boundary = B{k};
-        points=[boundary(:,2), boundary(:,1)]; 
-        plot(boundary(:,2), boundary(:,1),'g','LineWidth',1);
-        fprintf(fileID,'%f\r\n',points);
-        end
-        
-        %This is for slice z
-        for k=0:length(B)
-        fprintf(fileID,' ',imageSlice)    
-        end    
-            
-    end
-end    
+% create base of output filenames based on results filename
+indexDot = find(resultsFileName == '.');
+textOutName = resultsFileName(1,1:indexDot-1);
+textOutName = strcat(textOutName,'_CGB_EAT_CAT_COMPOSITE.txt');
+
+% decide how many frames there are
+numSlices = size(EAT3d,3); % 3rd dim is slices
+
+% open and write top part of file
+fid = fopen(textOutName,'w');
+fprintf(fid,'%d\n',numSlices);
+
+% open up a figure window to display boundary pixels, use space bar to loop
+% through each image
+figure; 
+hold on;
+
+% loop through number of slices
+for i=1:numSlices
     
+    % write frame number
+    fprintf(fid,'#%d\n',i-1);
+
+    % pull out this frame of data, convert to pure binary, and write out
+    % the boundary pixels as the contours
+    imageSlice = EAT3d(:,:,i);
+    binImage = (imageSlice>0);
+    clear imageSlice;
+    [B,L] = bwboundaries(binImage,8,'holes');
+    
+    % number of objects algorithm traced
+    numObjects = max(size(B));
+    
+    if numObjects > 0
+    
+        % count up the total number of points for all objects
+        totalNumPointsOnFrame = 0;
+        for j=1:numObjects
+            points = B{j};
+            numPtsObject = size(points,1); % column wise, num rows is num pts
+            totalNumPointsOnFrame = totalNumPointsOnFrame + numPtsObject;
+        end
+
+        % write out the number of points on this frame
+        fprintf(fid,'%d\n',totalNumPointsOnFrame);
+
+        % loop through each object and write points
+        for j=1:numObjects
+            points = B{j};
+            numPtsObject = size(points,1);
+            for k=1:numPtsObject
+                fprintf(fid,'%.3f %.3f %.3f\n',points(k,2)-1,points(k,1),i-1);
+            end
+            plot(points(:,2),points(:,1),'k','LineWidth',1);
+        end
+   
+        %pause;
         
+    else
+        % write out zero for this frame
+        fprintf(fid,'%d\n',0);
 
+    end
+    
+end
 
-fclose(fileID);
-type EXEAT.txt
+% close file
+hold off;
+fclose(fid);
+
 
 
 % --- Executes on button press in Statistics.
